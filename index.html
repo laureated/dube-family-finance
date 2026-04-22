@@ -294,6 +294,45 @@ select.form-input option { background: var(--white); }
 .empty-state { text-align: center; padding: 40px 28px; color: var(--text3); }
 .empty-state .es-icon { font-size: 48px; margin-bottom: 14px; }
 .empty-state p { font-size: 13px; line-height: 1.6; font-weight: 600; color: var(--text2); }
+
+/* PIN LOCK */
+.pin-screen {
+  position: fixed; inset: 0; background: var(--white);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  z-index: 9999; padding: 40px 32px;
+}
+.pin-screen.hidden { display: none; }
+.pin-logo { font-size: 52px; margin-bottom: 12px; }
+.pin-title { font-size: 24px; font-weight: 900; color: var(--text); margin-bottom: 4px; }
+.pin-sub { font-size: 13px; color: var(--text2); font-weight: 600; margin-bottom: 40px; }
+.pin-dots { display: flex; gap: 16px; margin-bottom: 40px; }
+.pin-dot {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid var(--text3); background: transparent;
+  transition: all 0.2s;
+}
+.pin-dot.filled { background: var(--accent); border-color: var(--accent); transform: scale(1.1); }
+.pin-dot.error { background: var(--expense); border-color: var(--expense); animation: shake 0.4s; }
+@keyframes shake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-6px)} 75%{transform:translateX(6px)} }
+.pin-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 12px; width: 100%; max-width: 280px;
+}
+.pin-btn {
+  aspect-ratio: 1; border-radius: 50%; border: 1.5px solid var(--border);
+  background: var(--bg); font-size: 22px; font-weight: 800; color: var(--text);
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s; box-shadow: var(--shadow); font-family: 'Nunito', sans-serif;
+}
+.pin-btn:active { transform: scale(0.92); background: var(--accent); color: #fff; border-color: var(--accent); }
+.pin-btn.del { font-size: 18px; color: var(--text2); }
+.pin-btn.empty { border: none; background: transparent; box-shadow: none; cursor: default; }
+.pin-error-msg { font-size: 13px; color: var(--expense); font-weight: 700; margin-top: -24px; margin-bottom: 16px; min-height: 20px; }
+.pin-forgot { font-size: 12px; color: var(--text3); font-weight: 600; margin-top: 24px; cursor: pointer; }
+.pin-forgot:active { color: var(--accent); }
+
+/* SET PIN SCREEN */
+.set-pin-step { font-size: 13px; color: var(--accent); font-weight: 700; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -1144,7 +1183,145 @@ function init(){
     setSyncStatus('','No sync URL — add in Settings');
   }
 }
-init();
+
+// ═══ PIN LOCK ══════════════════════
+const DEFAULT_PIN = '1234'; // first-time default, user sets their own
+let pinBuffer = '';
+let pinMode = 'enter'; // 'enter' | 'set-new' | 'confirm-new'
+let pinNewTemp = '';
+
+function pinInit() {
+  const stored = localStorage.getItem('cb_pin');
+  if (!stored) {
+    // First time — ask them to set a PIN
+    pinMode = 'set-new';
+    document.getElementById('pin-sub').textContent = 'Create your 4-digit PIN';
+    document.getElementById('pin-forgot').style.display = 'none';
+  } else {
+    pinMode = 'enter';
+    document.getElementById('pin-sub').textContent = 'Enter your PIN';
+    document.getElementById('pin-forgot').style.display = 'block';
+  }
+  pinBuffer = '';
+  updatePinDots();
+}
+
+function pinPress(digit) {
+  if (pinBuffer.length >= 4) return;
+  pinBuffer += digit;
+  updatePinDots();
+  if (pinBuffer.length === 4) {
+    setTimeout(() => pinSubmit(), 120);
+  }
+}
+
+function pinDelete() {
+  pinBuffer = pinBuffer.slice(0, -1);
+  document.getElementById('pin-error').textContent = '';
+  updatePinDots();
+}
+
+function updatePinDots(state) {
+  for (let i = 0; i < 4; i++) {
+    const dot = document.getElementById('pd' + i);
+    dot.className = 'pin-dot';
+    if (i < pinBuffer.length) dot.classList.add('filled');
+    if (state === 'error') dot.classList.add('error');
+  }
+}
+
+function pinSubmit() {
+  if (pinMode === 'enter') {
+    const stored = localStorage.getItem('cb_pin');
+    if (pinBuffer === stored) {
+      // Correct
+      document.getElementById('pin-screen').classList.add('hidden');
+      init();
+    } else {
+      document.getElementById('pin-error').textContent = 'Incorrect PIN. Try again.';
+      updatePinDots('error');
+      setTimeout(() => { pinBuffer = ''; updatePinDots(); document.getElementById('pin-error').textContent = ''; }, 800);
+    }
+  } else if (pinMode === 'set-new') {
+    pinNewTemp = pinBuffer;
+    pinBuffer = '';
+    pinMode = 'confirm-new';
+    document.getElementById('pin-sub').textContent = 'Confirm your PIN';
+    updatePinDots();
+  } else if (pinMode === 'confirm-new') {
+    if (pinBuffer === pinNewTemp) {
+      localStorage.setItem('cb_pin', pinBuffer);
+      document.getElementById('pin-screen').classList.add('hidden');
+      init();
+    } else {
+      document.getElementById('pin-error').textContent = "PINs don't match. Try again.";
+      updatePinDots('error');
+      setTimeout(() => {
+        pinBuffer = ''; pinNewTemp = ''; pinMode = 'set-new';
+        document.getElementById('pin-sub').textContent = 'Create your 4-digit PIN';
+        updatePinDots();
+        document.getElementById('pin-error').textContent = '';
+      }, 900);
+    }
+  }
+}
+
+function pinForgot() {
+  if (confirm('Reset PIN? You will need to create a new one.')) {
+    localStorage.removeItem('cb_pin');
+    pinMode = 'set-new';
+    pinBuffer = '';
+    document.getElementById('pin-sub').textContent = 'Create your 4-digit PIN';
+    document.getElementById('pin-forgot').style.display = 'none';
+    document.getElementById('pin-error').textContent = '';
+    updatePinDots();
+  }
+}
+
+// Also add a "Change PIN" option in settings
+function changePinPrompt() {
+  localStorage.removeItem('cb_pin');
+  pinBuffer = ''; pinMode = 'set-new';
+  document.getElementById('pin-sub').textContent = 'Create your new PIN';
+  document.getElementById('pin-forgot').style.display = 'none';
+  document.getElementById('pin-error').textContent = '';
+  document.getElementById('pin-screen').classList.remove('hidden');
+  updatePinDots();
+}
+
+// Start with PIN screen
+pinInit();
+
 </script>
+
+<!-- PIN LOCK SCREEN -->
+<div class="pin-screen" id="pin-screen">
+  <div class="pin-logo">🔐</div>
+  <div class="pin-title">Dube Family</div>
+  <div class="pin-sub" id="pin-sub">Enter your PIN</div>
+  <div class="pin-dots" id="pin-dots">
+    <div class="pin-dot" id="pd0"></div>
+    <div class="pin-dot" id="pd1"></div>
+    <div class="pin-dot" id="pd2"></div>
+    <div class="pin-dot" id="pd3"></div>
+  </div>
+  <div class="pin-error-msg" id="pin-error"></div>
+  <div class="pin-grid">
+    <div class="pin-btn" onclick="pinPress('1')">1</div>
+    <div class="pin-btn" onclick="pinPress('2')">2</div>
+    <div class="pin-btn" onclick="pinPress('3')">3</div>
+    <div class="pin-btn" onclick="pinPress('4')">4</div>
+    <div class="pin-btn" onclick="pinPress('5')">5</div>
+    <div class="pin-btn" onclick="pinPress('6')">6</div>
+    <div class="pin-btn" onclick="pinPress('7')">7</div>
+    <div class="pin-btn" onclick="pinPress('8')">8</div>
+    <div class="pin-btn" onclick="pinPress('9')">9</div>
+    <div class="pin-btn empty"></div>
+    <div class="pin-btn" onclick="pinPress('0')">0</div>
+    <div class="pin-btn del" onclick="pinDelete()">⌫</div>
+  </div>
+  <div class="pin-forgot" id="pin-forgot" onclick="pinForgot()">Forgot PIN?</div>
+</div>
+
 </body>
 </html>
