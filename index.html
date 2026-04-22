@@ -1185,23 +1185,21 @@ function init(){
 }
 
 // ═══ PIN LOCK ══════════════════════
-const DEFAULT_PIN = '1234'; // first-time default, user sets their own
+const DEFAULT_PIN = '2404';
 let pinBuffer = '';
 let pinMode = 'enter'; // 'enter' | 'set-new' | 'confirm-new'
 let pinNewTemp = '';
 
 function pinInit() {
-  const stored = localStorage.getItem('cb_pin');
+  let stored = localStorage.getItem('cb_pin');
   if (!stored) {
-    // First time — ask them to set a PIN
-    pinMode = 'set-new';
-    document.getElementById('pin-sub').textContent = 'Create your 4-digit PIN';
-    document.getElementById('pin-forgot').style.display = 'none';
-  } else {
-    pinMode = 'enter';
-    document.getElementById('pin-sub').textContent = 'Enter your PIN';
-    document.getElementById('pin-forgot').style.display = 'block';
+    // Set default PIN silently
+    localStorage.setItem('cb_pin', '2404');
+    stored = '2404';
   }
+  pinMode = 'enter';
+  document.getElementById('pin-sub').textContent = 'Enter your PIN';
+  document.getElementById('pin-forgot').style.display = 'block';
   pinBuffer = '';
   updatePinDots();
 }
